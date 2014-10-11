@@ -26,26 +26,26 @@ import time
 timer = None
 
 def get_dhcp_leases():
-	result = subprocess.Popen("/usr/bin/dumpleases -a", stdout=subprocess.PIPE, shell=True)
-	result.stdout.readline()
-	line = result.stdout.readline()
-	table = []
-	while line:
-		leases = {}
-		arr = line.split()
-		leases['mac'] = arr[0]
-		leases['ip'] = arr[1]
-		leases['hostname'] = arr[2]
-		leases['expire'] = ' '.join(arr[3:])
-		table.append(leases)
-		line = result.stdout.readline()
-	return table
+    result = subprocess.Popen("/usr/bin/dumpleases -a", stdout=subprocess.PIPE, shell=True)
+    result.stdout.readline()
+    line = result.stdout.readline()
+    table = []
+    while line:
+        leases = {}
+        arr = line.split()
+        leases['mac'] = arr[0]
+        leases['ip'] = arr[1]
+        leases['hostname'] = arr[2]
+        leases['expire'] = ' '.join(arr[3:])
+        table.append(leases)
+        line = result.stdout.readline()
+    return table
 
 def server_status_app(environ, start_response):
-	if environ['PATH_INFO'] == '/api/server_status':
-		return handle_server_status_request(environ, start_response)
-	else:
-		return handle_webpage_request(environ, start_response)
+    if environ['PATH_INFO'] == '/api/server_status':
+        return handle_server_status_request(environ, start_response)
+    else:
+        return handle_webpage_request(environ, start_response)
 
 def LOG(s):
     print s
@@ -97,10 +97,11 @@ class ClientManager:
             client = Client(arp, ip)
             if arp not in self.clients:
                 self.clients[arp] = Client(arp, ip)
-		# Do not wait to return. This will allow the HTTP connection to
-		# complete, before the shell script actually makes changes to
-		# iptables that will potentially terminate the connection.
-                subprocess.Popen("./allow_ip %s" % ip, shell=True)
+
+            # Do not wait to return. This will allow the HTTP connection to
+            # complete, before the shell script actually makes changes to
+            # iptables that will potentially terminate the connection.
+            subprocess.Popen("./allow_ip %s" % ip, shell=True)
             return self.clients[arp]
 
     def find_ip(self, ip):
