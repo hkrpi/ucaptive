@@ -1,2 +1,4 @@
 #!/bin/bash
-echo "expire ip: $1 -- unimplmented"
+
+iptables -D CPSESSION -s $1 -j ACCEPT
+iptables -t nat -D CPSESSION -s $1 -j ACCEPT

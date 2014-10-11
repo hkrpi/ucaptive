@@ -1,5 +1,6 @@
 #!/usr/bin/python
 
+import cgi
 import time
 import BaseHTTPServer
 import subprocess
@@ -10,6 +11,12 @@ PORT_NUMBER = 6890
 TIME_LIMIT = 3600
 
 ARP_CLIENTS = {}
+
+def LOG(s):
+    s = str(s).replace("\n", "\\n")
+    fp = open("log.txt", "a")
+    fp.write(str(datetime.datetime.now()) + ": " + s + "\n")
+    fp.close()
 
 class Client:
     def __init__(self, arp, ip):
@@ -43,8 +50,16 @@ class ClientManager:
         client = Client(arp, ip)
         if arp not in self.clients:
             self.clients[arp] = Client(arp, ip)
-            subprocess.call("./allow_ip %s" % ip, shell=True)
+            # Do not wait to return.
+            subprocess.Popen("./allow_ip %s" % ip, shell=True)
         return self.clients[arp]
+
+    def find_ip(self, ip):
+        for arp, client in self.clients.iteritems():
+            if client.ip == ip:
+                return client
+        return False
+        
 
 clientManager = ClientManager()
 
@@ -54,25 +69,37 @@ class MyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         s.send_response(200)
         s.send_header("Content-type", "text/html")
         s.end_headers()
-        s.wfile.write(open("index.html").read())
+        s.wfile.write(open("index.html").read().replace("TERMS_TEXT", open("terms.txt").read()))
 
     def do_POST(s):
+
+        data = cgi.FieldStorage(fp=s.rfile, headers=s.headers, environ={"REQUEST_METHOD": "POST"})
+        if "twosentences" not in data or not data["twosentences"].value:
+            s.send_response(303)
+            s.send_header("Location", "http://10.68.9.1:6890")
+            s.end_headers()
+            return
+
         try:
-            arp = subprocess.check_output("./lookup_mac " + " %s" % s.client_address[0], shell=True)
+            arp = subprocess.check_output("./lookup_mac " + " %s" % s.client_address[0], shell=True).strip()
         except Exception:
             arp = ""
-
-        if arp == "":
-            s.wfile.write("Invalid IP address")
-
-        print "Client with arp %s requested access" % arp
-        res = clientManager.add(arp, s.client_address[0])
-        if res != True: print "Client already exists"
 
         s.send_response(200)
         s.send_header("Content-type", "text/html")
         s.end_headers()
-	s.wfile.write("SUCCESS")
+        s.wfile.write(open("header.html").read())
+
+        if arp == "":
+            s.wfile.write("Invalid IP address")
+            return
+        else:
+            twosentences = data["twosentences"].value
+            LOG("Client: %s %s requested access" % (arp, s.client_address[0])
+            LOG("Two Sentences: " + twosentences + "\n")
+
+        s.wfile.write("""<a href="">OK</a>""")
+        clientManager.add(arp, s.client_address[0])
 
 if __name__ == '__main__':
     server_class = BaseHTTPServer.HTTPServer
