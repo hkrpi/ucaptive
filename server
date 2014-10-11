@@ -1,6 +1,15 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
+HOST_NAME = '0.0.0.0'
+PORT_NUMBER = 6890
+TIME_LIMIT = 1800
+SERVER_URL = "http://10.68.9.1:6890"
+MAX_CLIENT_LIMIT = 5
+GC_INTERVAL = 300
+ADMIN_PASSWORD = "qwertyu"
+
+
 import BaseHTTPServer
 import cgi
 import datetime
@@ -13,16 +22,7 @@ import sys
 import threading
 import time
 
-HOST_NAME = '0.0.0.0'
-PORT_NUMBER = 6890
-TIME_LIMIT = 3600
-SERVER_URL = "http://10.68.9.1:6890"
-MAX_CLIENT_LIMIT = 5
-GC_INTERVAL = 300
-ADMIN_PASSWORD = "qwertyu"
-
-ARP_CLIENTS = {}
-
+# Reusable timer reference.
 timer = None
 
 def get_dhcp_leases():
@@ -97,7 +97,9 @@ class ClientManager:
             client = Client(arp, ip)
             if arp not in self.clients:
                 self.clients[arp] = Client(arp, ip)
-                # Do not wait to return.
+		# Do not wait to return. This will allow the HTTP connection to
+		# complete, before the shell script actually makes changes to
+		# iptables that will potentially terminate the connection.
                 subprocess.Popen("./allow_ip %s" % ip, shell=True)
             return self.clients[arp]
 
@@ -135,7 +137,7 @@ class MyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         s.send_response(200)
         s.send_header("Content-type", "text/html")
         s.end_headers()
-        generated_text = "在線人數：%d (上限：%d)" % (clientManager.count(), MAX_CLIENT_LIMIT)
+        generated_text = "在線人數：%d (上限：%d), 每次上網限時 %d 分鐘 (可更新)" % (clientManager.count(), MAX_CLIENT_LIMIT, int(TIME_LIMIT / 60))
         s.wfile.write(open("index.html").read().replace("TERMS_TEXT", open("terms.txt").read()).replace("SERVER_URL", SERVER_URL).replace("GENERATED_TEXT", generated_text))
 
     def do_POST(s):
@@ -175,7 +177,7 @@ class MyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 if __name__ == '__main__':
     server_class = BaseHTTPServer.HTTPServer
     httpd = server_class((HOST_NAME, PORT_NUMBER), MyHandler)
-    print time.asctime(), "Server Starts - %s:%s" % (HOST_NAME, PORT_NUMBER)
+    LOG("Server Starts - %s:%s" % (HOST_NAME, PORT_NUMBER))
     try:
         timer = threading.Timer(60, clientManager.gc)
         timer.start()
@@ -184,5 +186,5 @@ if __name__ == '__main__':
         timer.cancel()
         os.kill(os.getpid(), 9)
     httpd.server_close()
-    print time.asctime(), "Server Stops - %s:%s" % (HOST_NAME, PORT_NUMBER)
+    LOG("Server Stops - %s:%s" % (HOST_NAME, PORT_NUMBER))
 
