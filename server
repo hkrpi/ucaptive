@@ -1,0 +1,89 @@
+#!/usr/bin/python
+
+import time
+import BaseHTTPServer
+import subprocess
+import datetime
+
+HOST_NAME = '0.0.0.0'
+PORT_NUMBER = 6890
+TIME_LIMIT = 3600
+
+ARP_CLIENTS = {}
+
+class Client:
+    def __init__(self, arp, ip):
+        self.arp = arp
+        self.ip = ip
+        self.start_time = datetime.datetime.now()
+
+    def is_expired(self):
+        return (datetime.datetime.now() - self.start_time).total_seconds() > TIME_LIMIT
+
+    def remaining(self):
+        return TIME_LIMIT - (datetime.datetime.now() - self.start_time).total_seconds()
+
+class ClientManager:
+    def __init__(self):
+        self.clients = {}
+        # TODO: clean up iptables rules for any existing stuff.
+
+    def gc(self):
+        to_remove = []
+        for arp, client in self.clients.iteritems():
+            if client.is_expired():
+                to_remove.append(client)
+
+        for client in to_remove:
+            subprocess.call("./expire_ip %s" % client.ip, shell=True)
+            del self.clients[client]
+
+    def add(self, arp, ip):
+        self.gc()
+        client = Client(arp, ip)
+        if arp not in self.clients:
+            self.clients[arp] = Client(arp, ip)
+            subprocess.call("./allow_ip %s" % ip, shell=True)
+            return True
+        else:
+            return self.clients[arp]
+
+clientManager = ClientManager()
+
+class MyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
+    def do_GET(s):
+        """Respond to a GET request."""
+        s.send_response(200)
+        s.send_header("Content-type", "text/html")
+        s.end_headers()
+        s.wfile.write(open("index.html").read())
+
+    def do_POST(s):
+        try:
+            arp = subprocess.check_output("./lookup_mac " + " %s" % s.client_address[0], shell=True)
+        except Exception:
+            arp = ""
+
+        if arp == "":
+            s.wfile.write("Invalid IP address")
+
+        print "Client with arp %s requested access" % arp
+        res = clientManager.add(arp, s.client_address[0])
+        if res != True: print "Client already exists"
+
+        s.send_response(200)
+        s.send_header("Content-type", "text/html")
+        s.end_headers()
+        s.wfile.write("Remaining %f seconds" % res.remaining())
+
+if __name__ == '__main__':
+    server_class = BaseHTTPServer.HTTPServer
+    httpd = server_class((HOST_NAME, PORT_NUMBER), MyHandler)
+    print time.asctime(), "Server Starts - %s:%s" % (HOST_NAME, PORT_NUMBER)
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    httpd.server_close()
+    print time.asctime(), "Server Stops - %s:%s" % (HOST_NAME, PORT_NUMBER)
+
