@@ -1,18 +1,23 @@
 #!/usr/bin/python
 
-import cgi
-import time
 import BaseHTTPServer
-import subprocess
+import cgi
 import datetime
+import os
+import subprocess
+import threading
+import time
 
 HOST_NAME = '0.0.0.0'
 PORT_NUMBER = 6890
-TIME_LIMIT = 3600
+TIME_LIMIT = 30
 
 ARP_CLIENTS = {}
 
+timer = None
+
 def LOG(s):
+    print s
     s = str(s).replace("\n", "\\n")
     fp = open("log.txt", "a")
     fp.write(str(datetime.datetime.now()) + ": " + s + "\n")
@@ -33,32 +38,40 @@ class Client:
 class ClientManager:
     def __init__(self):
         self.clients = {}
+        self.lock = threading.RLock()
         subprocess.call("./initialize_rules")
 
     def gc(self):
-        to_remove = []
-        for arp, client in self.clients.iteritems():
-            if client.is_expired():
-                to_remove.append(client)
+        LOG("gc...")
+        timer = threading.Timer(60, clientManager.gc)
+        timer.start()
 
-        for client in to_remove:
-            subprocess.call("./expire_ip %s" % client.ip, shell=True)
-            del self.clients[client]
+        with self.lock:
+            to_remove = []
+            for arp, client in self.clients.iteritems():
+                if client.is_expired():
+                    to_remove.append(arp)
+    
+            for client_arp in to_remove:
+                LOG("expiring %s %s" % (client.arp, client.ip))
+                subprocess.call("./expire_ip %s" % client.ip, shell=True)
+                del self.clients[client_arp]
 
     def add(self, arp, ip):
-        self.gc()
-        client = Client(arp, ip)
-        if arp not in self.clients:
-            self.clients[arp] = Client(arp, ip)
-            # Do not wait to return.
-            subprocess.Popen("./allow_ip %s" % ip, shell=True)
-        return self.clients[arp]
+        with self.lock:
+            client = Client(arp, ip)
+            if arp not in self.clients:
+                self.clients[arp] = Client(arp, ip)
+                # Do not wait to return.
+                subprocess.Popen("./allow_ip %s" % ip, shell=True)
+            return self.clients[arp]
 
     def find_ip(self, ip):
-        for arp, client in self.clients.iteritems():
-            if client.ip == ip:
-                return client
-        return False
+        with self.lock:
+            for arp, client in self.clients.iteritems():
+                if client.ip == ip:
+                    return client
+            return False
         
 
 clientManager = ClientManager()
@@ -94,11 +107,11 @@ class MyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             s.wfile.write("Invalid IP address")
             return
         else:
-            twosentences = data["twosentences"].value
-            LOG("Client: %s %s requested access" % (arp, s.client_address[0])
+            twosentences = data["twosentences"].value.strip()
+            LOG("Client: %s %s requested access" % (arp, s.client_address[0]))
             LOG("Two Sentences: " + twosentences + "\n")
 
-        s.wfile.write("""<a href="">OK</a>""")
+        s.wfile.write("""<a href="http://www.google.com">OK</a>""")
         clientManager.add(arp, s.client_address[0])
 
 if __name__ == '__main__':
@@ -106,9 +119,12 @@ if __name__ == '__main__':
     httpd = server_class((HOST_NAME, PORT_NUMBER), MyHandler)
     print time.asctime(), "Server Starts - %s:%s" % (HOST_NAME, PORT_NUMBER)
     try:
+        timer = threading.Timer(60, clientManager.gc)
+        timer.start()
         httpd.serve_forever()
     except KeyboardInterrupt:
-        pass
+        timer.cancel()
+        os.kill(os.getpid(), 9)
     httpd.server_close()
     print time.asctime(), "Server Stops - %s:%s" % (HOST_NAME, PORT_NUMBER)
 
