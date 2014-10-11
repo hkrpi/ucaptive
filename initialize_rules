@@ -1,0 +1,12 @@
+#!/bin/bash
+
+set -e
+
+echo "initializing CPSESSION..."
+# iptables -t nat -A CPSESSION -p tcp -j REDIRECT --to-port 6890
+iptables -F CPSESSION
+# iptables -A CPSESSION -j ACCEPT
+iptables -A CPSESSION -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+iptables -A CPSESSION -p tcp --dport 53 -j ACCEPT
+iptables -A CPSESSION -p udp --dport 53 -j ACCEPT
+echo "done."

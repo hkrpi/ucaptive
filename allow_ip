@@ -1,3 +1,4 @@
 #!/bin/bash
 
-echo "Allow ip: %1  -- unimplemented"
+echo "Allow ip: $1  -- unimplemented"
+iptables -A CPSESSION -s $1 -j ACCEPT

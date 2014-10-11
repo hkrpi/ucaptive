@@ -26,7 +26,7 @@ class Client:
 class ClientManager:
     def __init__(self):
         self.clients = {}
-        # TODO: clean up iptables rules for any existing stuff.
+        subprocess.call("./initialize_rules")
 
     def gc(self):
         to_remove = []
@@ -44,9 +44,7 @@ class ClientManager:
         if arp not in self.clients:
             self.clients[arp] = Client(arp, ip)
             subprocess.call("./allow_ip %s" % ip, shell=True)
-            return True
-        else:
-            return self.clients[arp]
+        return self.clients[arp]
 
 clientManager = ClientManager()
 
@@ -74,7 +72,7 @@ class MyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         s.send_response(200)
         s.send_header("Content-type", "text/html")
         s.end_headers()
-        s.wfile.write("Remaining %f seconds" % res.remaining())
+	s.wfile.write("SUCCESS")
 
 if __name__ == '__main__':
     server_class = BaseHTTPServer.HTTPServer
